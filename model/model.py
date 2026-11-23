@@ -13,7 +13,6 @@ class Model:
 
         self._relazioni_e_i = {}
         self._relazioni_i_e = {}
-        # TODO: Aggiungere eventuali altri attributi
 
         # Caricamento
         self.load_escursioni()
@@ -40,16 +39,24 @@ class Model:
             --> Ogni Escursione ha un set di PuntoInteresse.
             --> Ogni PuntoInteresse ha un set di Escursioni.
         """
-        # TODO
         data = EscursioneDAO.get_escursioni_punti_interesse()
-        for obj in data:
-            if obj["id_escursione"] not in self._relazioni_e_i:
-                self._relazioni_e_i[obj["id_escursione"]] = []
-            self._relazioni_e_i[obj["id_escursione"]].append(obj["id_punto_interesse"])
+        if data is not None:
+            for obj in data:
+                id_e = obj["id_escursione"]
+                id_p = obj["id_punto_interesse"]
+                if obj["id_escursione"] not in self._relazioni_e_i:
+                    self._relazioni_e_i[obj["id_escursione"]] = []
+                self._relazioni_e_i[obj["id_escursione"]].append(obj["id_punto_interesse"])
 
-            if obj["id_punto_interesse"] not in self._relazioni_i_e:
-                self._relazioni_i_e[obj["id_punto_interesse"]] = []
-            self._relazioni_i_e[obj["id_punto_interesse"]].append(obj["id_escursione"])
+                if obj["id_punto_interesse"] not in self._relazioni_i_e:
+                    self._relazioni_i_e[obj["id_punto_interesse"]] = []
+                self._relazioni_i_e[obj["id_punto_interesse"]].append(obj["id_escursione"])
+
+                escursione = self.escursioni_map[id_e]
+                punto = self.punti_interesse_map[id_p]
+                escursione.punti_interesse.add(punto)
+                punto.escursioni.add(escursione)
+
 
         print(self._relazioni_e_i)
         print(self._relazioni_i_e)
@@ -69,11 +76,45 @@ class Model:
         self._costo = 0
         self._valore_ottimo = -1
 
-        # TODO
+        self._max_giorni = max_giorni
+        self._max_budget = max_budget
+        self._escursioni_parco = []
+        for e in self.escursioni_map.values():
+            if e.id_parco == id_parco:
+                self._escursioni_parco.append(e)
+
+        self._ricorsione(0, [], 0, 0, 0, set())
 
         return self._pacchetto_ottimo, self._costo, self._valore_ottimo
 
-    def _ricorsione(self, start_index: int, pacchetto_parziale: list, durata_corrente: int, costo_corrente: float, valore_corrente: int, punti_usati: set):
-        """ Algoritmo di ricorsione che deve trovare il pacchetto che massimizza il voto complessivo dei visitatori"""
+    def _ricorsione(self, start_index: int, pacchetto_parziale: list, durata_corrente: int,
+                    costo_corrente: float, valore_corrente: int, punti_usati: set):
 
-        # TODO: è possibile cambiare i parametri formali della funzione se ritenuto opportuno
+        if valore_corrente > self._valore_ottimo:
+            self._valore_ottimo = valore_corrente
+            self._pacchetto_ottimo = pacchetto_parziale.copy()
+            self._costo = costo_corrente
+
+        for i in range(start_index, len(self._escursioni_parco)):
+            e = self._escursioni_parco[i]
+            nuova_durata = durata_corrente + e.durata_giorni
+            nuovo_costo = costo_corrente + e.costo
+
+            if self._max_giorni is not None and nuova_durata > self._max_giorni:
+                continue
+            if self._max_budget is not None and nuovo_costo > self._max_budget:
+                continue
+
+            punti_e = set(self._relazioni_e_i.get(e.id, []))
+            if not punti_e.isdisjoint(punti_usati):
+                continue
+
+            nuovo_valore = valore_corrente
+            for id_punto in punti_e:
+                nuovo_valore += self.punti_interesse_map[id_punto].voto_visitatori
+
+            pacchetto_parziale.append(e)
+            self._ricorsione(i + 1, pacchetto_parziale, nuova_durata, nuovo_costo,
+                             nuovo_valore, punti_usati | punti_e)
+
+            pacchetto_parziale.pop()
